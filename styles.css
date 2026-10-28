@@ -1,0 +1,111 @@
+/* Custom Styles for SmartBio 360 */
+
+@keyframes scanner {
+  0% {
+    top: 0%;
+    opacity: 0.8;
+  }
+  50% {
+    top: 96%;
+    opacity: 1;
+  }
+  100% {
+    top: 0%;
+    opacity: 0.8;
+  }
+}
+
+.animate-scanner {
+  animation: scanner 2s infinite ease-in-out;
+}
+
+/* Custom Scrollbar */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+::-webkit-scrollbar-track {
+  background: #f1f5f9;
+  border-radius: 9999px;
+}
+::-webkit-scrollbar-thumb {
+  background: #cbd5e1;
+  border-radius: 9999px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: #94a3b8;
+}
+
+/* Active Nav Button */
+.nav-btn.active {
+  background-color: #ecfdf5;
+  color: #065f46;
+  border-bottom: 2px solid #059669;
+}
+#nav-admin.active {
+  background-color: #ffe4e6 !important;
+  color: #9f1239 !important;
+  border-bottom: 2px solid #e11d48 !important;
+}
+
+/* Interactive Organelle SVG elements */
+.organelle-interactive {
+  cursor: pointer;
+  transition: all 0.25s ease-in-out;
+}
+
+.organelle-interactive:hover {
+  filter: brightness(1.25) drop-shadow(0 0 8px rgba(52, 211, 153, 0.8));
+  transform-origin: center;
+}
+
+.organelle-active {
+  filter: brightness(1.3) drop-shadow(0 0 12px rgba(16, 185, 129, 1)) !important;
+}
+
+/* Pulsing highlight */
+@keyframes organelle-pulse {
+  0%, 100% { transform: scale(1); }
+  50% { transform: scale(1.04); }
+}
+
+.pulse-selected {
+  animation: organelle-pulse 1.8s infinite ease-in-out;
+}
+
+/* Heart Rhythm & Pulse Animation */
+@keyframes heartPulse {
+  0% { transform: scale(1); }
+  12% { transform: scale(1.045); }
+  24% { transform: scale(1); }
+  36% { transform: scale(1.03); }
+  60% { transform: scale(1); }
+  100% { transform: scale(1); }
+}
+
+.heart-beating-active {
+  animation: heartPulse 1.1s infinite ease-in-out;
+  transform-origin: center center;
+}
+
+/* Audio Wave Animation when speaking */
+@keyframes audioWave {
+  0%, 100% { height: 6px; }
+  50% { height: 18px; }
+}
+
+.speaking-wave span {
+  display: inline-block;
+  width: 3px;
+  background-color: #059669;
+  border-radius: 9999px;
+  animation: audioWave 0.6s infinite ease-in-out;
+}
+
+.speaking-wave span:nth-child(2) {
+  animation-delay: 0.15s;
+}
+
+.speaking-wave span:nth-child(3) {
+  animation-delay: 0.3s;
+}
