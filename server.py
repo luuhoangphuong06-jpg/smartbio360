@@ -1,7 +1,7 @@
 """
-SmartBio 360 - Backend Server
-Framework: Flask + SQLite3 (Python Standard Library)
-Cung cấp API Quản lý Học sinh, Xác thực JWT/Token, Lưu lịch sử học tập, Bảng xếp hạng & Bảng Quản trị Giáo viên.
+SmartBio 360 - Backend Server (Phiên bản Tinh gọn: Lab 360° & Hành tinh Xanh)
+Framework: Flask + SQLite3
+Cung cấp API Quản lý Học sinh, Xác thực Token, Lưu điểm Thám tử Lab 360°, Nhật ký Xanh & Bảng Quản trị Giáo viên.
 """
 
 import os
@@ -54,15 +54,18 @@ def init_db():
                 grade INTEGER NOT NULL,
                 classroom TEXT DEFAULT '',
                 role TEXT DEFAULT 'student',
+                detective_score INTEGER DEFAULT 0,
                 created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
             )
         """)
 
-        # Migration: Kiểm tra và bổ sung cột role nếu bảng cũ chưa có
+        # Migration: Bổ sung các cột nếu bảng cũ chưa có
         cursor.execute("PRAGMA table_info(users)")
         columns = [col["name"] for col in cursor.fetchall()]
         if "role" not in columns:
             cursor.execute("ALTER TABLE users ADD COLUMN role TEXT DEFAULT 'student'")
+        if "detective_score" not in columns:
+            cursor.execute("ALTER TABLE users ADD COLUMN detective_score INTEGER DEFAULT 0")
 
         # 2. Bảng phiên đăng nhập (sessions)
         cursor.execute("""
@@ -74,16 +77,15 @@ def init_db():
             )
         """)
 
-        # 3. Bảng lịch sử làm bài trắc nghiệm / đánh giá (quiz_history)
+        # 3. Bảng lịch sử thử thách Thám tử bắt lỗi AI tại Lab 360° (detective_logs)
         cursor.execute("""
-            CREATE TABLE IF NOT EXISTS quiz_history (
+            CREATE TABLE IF NOT EXISTS detective_logs (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 user_id INTEGER NOT NULL,
-                topic TEXT NOT NULL,
-                score INTEGER NOT NULL,
-                total_questions INTEGER NOT NULL,
-                rank_title TEXT NOT NULL,
-                completed_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                organelle_key TEXT NOT NULL,
+                case_title TEXT NOT NULL,
+                points INTEGER DEFAULT 10,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                 FOREIGN KEY (user_id) REFERENCES users (id) ON DELETE CASCADE
             )
         """)
@@ -109,8 +111,8 @@ def init_db():
             salt = secrets.token_hex(8)
             pwd_hash = hash_password("admin123", salt)
             cursor.execute("""
-                INSERT INTO users (username, password_hash, salt, full_name, grade, classroom, role)
-                VALUES ('admin', ?, ?, 'Thầy Quản Trị Viên (Tổ KHTN)', 0, 'Văn Phòng Bộ Môn', 'teacher')
+                INSERT INTO users (username, password_hash, salt, full_name, grade, classroom, role, detective_score)
+                VALUES ('admin', ?, ?, 'Thầy Quản Trị Viên (Tổ KHTN)', 0, 'Văn Phòng Bộ Môn', 'teacher', 0)
             """, (pwd_hash, salt))
             conn.commit()
 
@@ -120,36 +122,36 @@ def init_db():
             seed_sample_students(cursor, conn)
 
 def seed_sample_students(cursor, conn):
-    """Tạo mẫu các học sinh và điểm số phong phú cho hệ thống"""
+    """Tạo mẫu các học sinh có điểm Thám tử Lab và Nhật ký Xanh"""
     sample_students = [
-        ("nguyenan", "Nguyễn Bình An", 8, "8A1", "123456", 5, "Bậc thầy Sinh học"),
-        ("tranlinh", "Trần Khánh Linh", 7, "7A3", "123456", 4, "Nhà Khám phá Nhí"),
-        ("leminh", "Lê Quang Minh", 9, "9A2", "123456", 5, "Bậc thầy Sinh học"),
-        ("hoangmai", "Hoàng Ngọc Mai", 6, "6B", "123456", 4, "Nhà Khám phá Nhí"),
-        ("phamkhoi", "Phạm Đăng Khôi", 8, "8A4", "123456", 3, "Nhà Khám phá Nhí"),
+        ("nguyenan", "Nguyễn Bình An", 8, "8A1", "123456", 50, "cell-wall", "Bắt lỗi thành tế bào"),
+        ("tranlinh", "Trần Khánh Linh", 7, "7A3", "123456", 40, "chloroplast", "Bắt lỗi lục lạp ban đêm"),
+        ("leminh", "Lê Quang Minh", 9, "9A2", "123456", 50, "left-ventricle", "Bắt lỗi tâm thất trái"),
+        ("hoangmai", "Hoàng Ngọc Mai", 6, "6B", "123456", 30, "vacuole", "Bắt lỗi không bào trung tâm"),
+        ("phamkhoi", "Phạm Đăng Khôi", 8, "8A4", "123456", 30, "mitochondria", "Bắt lỗi ti thể"),
     ]
 
-    for username, name, grade, room, pwd, score, rank_t in sample_students:
+    for username, name, grade, room, pwd, score, organelle, title in sample_students:
         salt = secrets.token_hex(8)
         pwd_hash = hash_password(pwd, salt)
         cursor.execute("""
-            INSERT OR IGNORE INTO users (username, password_hash, salt, full_name, grade, classroom, role)
-            VALUES (?, ?, ?, ?, ?, ?, 'student')
-        """, (username, pwd_hash, salt, name, grade, room))
+            INSERT OR IGNORE INTO users (username, password_hash, salt, full_name, grade, classroom, role, detective_score)
+            VALUES (?, ?, ?, ?, ?, ?, 'student', ?)
+        """, (username, pwd_hash, salt, name, grade, room, score))
         
         cursor.execute("SELECT id FROM users WHERE username = ?", (username,))
         row = cursor.fetchone()
         if row:
             user_id = row["id"]
             cursor.execute("""
-                INSERT INTO quiz_history (user_id, topic, score, total_questions, rank_title)
-                VALUES (?, ?, ?, 5, ?)
-            """, (user_id, f"Tổng hợp KHTN Lớp {grade}", score, rank_t))
+                INSERT INTO detective_logs (user_id, organelle_key, case_title, points)
+                VALUES (?, ?, ?, ?)
+            """, (user_id, organelle, title, score))
 
             cursor.execute("""
                 INSERT INTO eco_logs (user_id, action_type, title, description)
                 VALUES (?, 'tree', ?, ?)
-            """, (user_id, f"Trồng cây xanh thực nghiệm tại lớp {room}", f"{name} đã cùng lớp ươm mầm 5 chậu cây xanh."))
+            """, (user_id, f"Trồng và chăm sóc cây xanh thực nghiệm lớp {room}", f"{name} đã cùng chi đội ươm mầm các chậu cây phục vụ bài học Quang hợp."))
 
     conn.commit()
 
@@ -208,7 +210,7 @@ def index():
 def static_proxy(path):
     return send_from_directory(BASE_DIR, path)
 
-# ==================== API AUTH ====================
+# ==================== API AUTHENTICATION ====================
 @app.route("/api/auth/register", methods=["POST"])
 def register():
     data = request.get_json() or {}
@@ -218,12 +220,8 @@ def register():
     grade = data.get("grade", 6)
     classroom = data.get("classroom", "").strip()
 
-    if not username or len(username) < 3:
-        return jsonify({"success": False, "message": "Tên đăng nhập phải từ 3 ký tự trở lên."}), 400
-    if not password or len(password) < 6:
-        return jsonify({"success": False, "message": "Mật khẩu phải từ 6 ký tự trở lên."}), 400
-    if not full_name:
-        return jsonify({"success": False, "message": "Vui lòng nhập Họ và tên học sinh."}), 400
+    if not username or not password or not full_name:
+        return jsonify({"success": False, "message": "Vui lòng điền đầy đủ họ tên, tên đăng nhập và mật khẩu."}), 400
 
     try:
         grade = int(grade)
@@ -233,38 +231,39 @@ def register():
         grade = 6
 
     salt = secrets.token_hex(8)
-    pwd_hash = hash_password(password, salt)
+    password_hash = hash_password(password, salt)
 
-    try:
-        with get_db() as conn:
-            cursor = conn.cursor()
+    with get_db() as conn:
+        cursor = conn.cursor()
+        try:
             cursor.execute("""
-                INSERT INTO users (username, password_hash, salt, full_name, grade, classroom, role)
-                VALUES (?, ?, ?, ?, ?, ?, 'student')
-            """, (username, pwd_hash, salt, full_name, grade, classroom))
-            user_id = cursor.lastrowid
-            
-            token = generate_token(user_id)
-            cursor.execute("INSERT INTO sessions (token, user_id) VALUES (?, ?)", (token, user_id))
+                INSERT INTO users (username, password_hash, salt, full_name, grade, classroom, role, detective_score)
+                VALUES (?, ?, ?, ?, ?, ?, 'student', 0)
+            """, (username, password_hash, salt, full_name, grade, classroom))
             conn.commit()
+            user_id = cursor.lastrowid
+        except sqlite3.IntegrityError:
+            return jsonify({"success": False, "message": "Tên đăng nhập này đã được sử dụng. Vui lòng chọn tên khác."}), 409
 
-            return jsonify({
-                "success": True,
-                "message": "Đăng ký tài khoản thành công!",
-                "token": token,
-                "user": {
-                    "id": user_id,
-                    "username": username,
-                    "full_name": full_name,
-                    "grade": grade,
-                    "classroom": classroom,
-                    "role": "student"
-                }
-            })
-    except sqlite3.IntegrityError:
-        return jsonify({"success": False, "message": "Tên đăng nhập này đã được sử dụng. Vui lòng chọn tên khác."}), 409
-    except Exception as e:
-        return jsonify({"success": False, "message": f"Lỗi hệ thống: {str(e)}"}), 500
+    token = generate_token(user_id)
+    with get_db() as conn:
+        conn.execute("INSERT INTO sessions (token, user_id) VALUES (?, ?)", (token, user_id))
+        conn.commit()
+
+    return jsonify({
+        "success": True,
+        "message": "Đăng ký tài khoản học sinh thành công!",
+        "token": token,
+        "user": {
+            "id": user_id,
+            "username": username,
+            "full_name": full_name,
+            "grade": grade,
+            "classroom": classroom,
+            "role": "student",
+            "detective_score": 0
+        }
+    }), 201
 
 @app.route("/api/auth/login", methods=["POST"])
 def login():
@@ -299,7 +298,8 @@ def login():
                 "full_name": user["full_name"],
                 "grade": user["grade"],
                 "classroom": user["classroom"],
-                "role": user["role"] or "student"
+                "role": user["role"] or "student",
+                "detective_score": user["detective_score"] or 0
             }
         })
 
@@ -321,12 +321,10 @@ def get_me():
 
     with get_db() as conn:
         user_id = user["id"]
-        quiz_stats = conn.execute("""
-            SELECT COUNT(*) AS total_quizzes, COALESCE(SUM(score), 0) AS total_score, COALESCE(MAX(score), 0) AS best_score
-            FROM quiz_history WHERE user_id = ?
-        """, (user_id,)).fetchone()
-
+        detective_score = user["detective_score"] or 0
         eco_count = conn.execute("SELECT COUNT(*) AS count FROM eco_logs WHERE user_id = ?", (user_id,)).fetchone()["count"]
+        detective_cases_count = conn.execute("SELECT COUNT(*) AS count FROM detective_logs WHERE user_id = ?", (user_id,)).fetchone()["count"]
+        total_green_points = detective_score + (eco_count * 10)
 
         return jsonify({
             "success": True,
@@ -337,62 +335,64 @@ def get_me():
                 "grade": user["grade"],
                 "classroom": user["classroom"],
                 "role": user["role"] or "student",
+                "detective_score": detective_score,
                 "stats": {
-                    "total_quizzes": quiz_stats["total_quizzes"],
-                    "total_score": quiz_stats["total_score"],
-                    "best_score": quiz_stats["best_score"],
-                    "eco_actions": eco_count
+                    "detective_score": detective_score,
+                    "detective_cases": detective_cases_count,
+                    "eco_actions": eco_count,
+                    "total_green_points": total_green_points
                 }
             }
         })
 
-# ==================== API QUIZ & LỊCH SỬ HỌC TẬP ====================
-@app.route("/api/quiz/save", methods=["POST"])
-def save_quiz():
+# ==================== API LAB 360° THÁM TỬ BẮT LỖI AI ====================
+@app.route("/api/lab/detective/submit", methods=["POST"])
+def submit_detective():
     user_id = get_current_user_id()
     if not user_id:
-        return jsonify({"success": False, "message": "Vui lòng đăng nhập để lưu kết quả bài thi."}), 401
+        return jsonify({"success": False, "message": "Vui lòng đăng nhập để lưu điểm Thám tử Sinh học."}), 401
 
     data = request.get_json() or {}
-    topic = data.get("topic", "Trắc nghiệm Sinh học THCS")
-    score = int(data.get("score", 0))
-    total_questions = int(data.get("total_questions", 5))
-    rank_title = data.get("rank_title", "Nhà Khám phá Nhí")
+    organelle_key = data.get("organelle_key", "general")
+    case_title = data.get("case_title", "Phát hiện lỗi nhận định AI")
+    points = int(data.get("points", 10))
 
     with get_db() as conn:
         cursor = conn.cursor()
         cursor.execute("""
-            INSERT INTO quiz_history (user_id, topic, score, total_questions, rank_title)
-            VALUES (?, ?, ?, ?, ?)
-        """, (user_id, topic, score, total_questions, rank_title))
+            INSERT INTO detective_logs (user_id, organelle_key, case_title, points)
+            VALUES (?, ?, ?, ?)
+        """, (user_id, organelle_key, case_title, points))
+
+        cursor.execute("UPDATE users SET detective_score = COALESCE(detective_score, 0) + ? WHERE id = ?", (points, user_id))
         conn.commit()
 
-        total_score = conn.execute("SELECT SUM(score) AS sum_score FROM quiz_history WHERE user_id = ?", (user_id,)).fetchone()["sum_score"]
+        updated_user = conn.execute("SELECT detective_score FROM users WHERE id = ?", (user_id,)).fetchone()
+        new_score = updated_user["detective_score"] if updated_user else points
 
         return jsonify({
             "success": True,
-            "message": "Đã lưu kết quả bài thi vào hồ sơ học sinh!",
-            "new_record_id": cursor.lastrowid,
-            "accumulated_score": total_score
+            "message": f"🎉 Xuất sắc! Em được cộng +{points} điểm Thám tử Khoa học!",
+            "detective_score": new_score
         })
 
-@app.route("/api/quiz/history", methods=["GET"])
-def get_quiz_history():
+@app.route("/api/lab/detective/history", methods=["GET"])
+def get_detective_history():
     user_id = get_current_user_id()
     if not user_id:
         return jsonify({"success": False, "message": "Chưa đăng nhập."}), 401
 
     with get_db() as conn:
         rows = conn.execute("""
-            SELECT id, topic, score, total_questions, rank_title, completed_at
-            FROM quiz_history WHERE user_id = ?
-            ORDER BY completed_at DESC LIMIT 20
+            SELECT id, organelle_key, case_title, points, created_at
+            FROM detective_logs WHERE user_id = ?
+            ORDER BY created_at DESC LIMIT 20
         """, (user_id,)).fetchall()
 
         history = [dict(row) for row in rows]
         return jsonify({"success": True, "history": history})
 
-# ==================== API ECO PLANET ====================
+# ==================== API ECO PLANET (HÀNH TINH XANH) ====================
 @app.route("/api/eco/logs", methods=["GET"])
 def get_eco_logs():
     with get_db() as conn:
@@ -403,7 +403,7 @@ def get_eco_logs():
                    COALESCE(u.classroom, '') AS author_class
             FROM eco_logs e
             LEFT JOIN users u ON e.user_id = u.id
-            ORDER BY e.created_at DESC LIMIT 30
+            ORDER BY e.created_at DESC LIMIT 40
         """).fetchall()
 
         logs = [dict(row) for row in rows]
@@ -430,7 +430,7 @@ def save_eco_log():
 
         return jsonify({
             "success": True,
-            "message": "Đã lưu hành động xanh vào sổ tay cộng đồng!",
+            "message": "Đã lưu hành động xanh vào sổ tay cộng đồng Hành tinh Xanh!",
             "log_id": cursor.lastrowid
         })
 
@@ -441,240 +441,157 @@ def get_leaderboard():
     
     query = """
         SELECT u.id, u.full_name, u.grade, u.classroom,
-               COALESCE(SUM(q.score), 0) AS total_score,
-               COUNT(q.id) AS total_quizzes,
-               (SELECT COUNT(*) FROM eco_logs e WHERE e.user_id = u.id) AS eco_count
+               COALESCE(u.detective_score, 0) AS detective_score,
+               (SELECT COUNT(*) FROM eco_logs e WHERE e.user_id = u.id) AS eco_count,
+               (COALESCE(u.detective_score, 0) + (SELECT COUNT(*) FROM eco_logs e WHERE e.user_id = u.id) * 10) AS total_points
         FROM users u
-        LEFT JOIN quiz_history q ON u.id = q.user_id
         WHERE u.role != 'teacher'
     """
     params = []
-    if grade_param in ["6", "7", "8", "9"]:
-        query += " AND u.grade = ?"
-        params.append(int(grade_param))
+    if grade_param != "all":
+        try:
+            grade_int = int(grade_param)
+            query += " AND u.grade = ?"
+            params.append(grade_int)
+        except ValueError:
+            pass
 
-    query += " GROUP BY u.id ORDER BY total_score DESC, eco_count DESC LIMIT 20"
+    query += " ORDER BY total_points DESC, detective_score DESC LIMIT 25"
 
     with get_db() as conn:
-        rows = conn.execute(query, params).fetchall()
-        ranking = []
-        for rank, row in enumerate(rows, start=1):
-            item = dict(row)
-            item["rank"] = rank
-            ranking.append(item)
+        rows = conn.execute(query, tuple(params)).fetchall()
+        leaderboard = []
+        for idx, r in enumerate(rows, 1):
+            leaderboard.append({
+                "rank": idx,
+                "id": r["id"],
+                "full_name": r["full_name"],
+                "grade": r["grade"],
+                "classroom": r["classroom"],
+                "detective_score": r["detective_score"],
+                "eco_count": r["eco_count"],
+                "total_points": r["total_points"]
+            })
+        return jsonify({"success": True, "leaderboard": leaderboard})
 
-        return jsonify({
-            "success": True,
-            "grade": grade_param,
-            "leaderboard": ranking
-        })
-
-# ==================== API QUẢN TRỊ VIÊN / GIÁO VIÊN (ADMIN DASHBOARD) ====================
+# ==================== API BẢNG QUẢN TRỊ VIÊN / GIÁO VIÊN ====================
 @app.route("/api/admin/overview", methods=["GET"])
 def admin_overview():
-    """Thống kê tổng quan trường học dành cho giáo viên"""
     if not is_admin_or_teacher():
         return jsonify({"success": False, "message": "Quyền truy cập bị từ chối. Chỉ dành cho Giáo viên/Admin."}), 403
 
     with get_db() as conn:
         total_students = conn.execute("SELECT COUNT(*) AS c FROM users WHERE role != 'teacher'").fetchone()["c"]
-        total_quizzes = conn.execute("SELECT COUNT(*) AS c FROM quiz_history").fetchone()["c"]
+        total_detective = conn.execute("SELECT COUNT(*) AS c FROM detective_logs").fetchone()["c"]
         total_eco = conn.execute("SELECT COUNT(*) AS c FROM eco_logs").fetchone()["c"]
-        avg_score_row = conn.execute("SELECT AVG(score) AS avg_s FROM quiz_history").fetchone()
+        avg_score_row = conn.execute("SELECT AVG(detective_score) AS avg_s FROM users WHERE role != 'teacher'").fetchone()
         avg_score = round(avg_score_row["avg_s"] or 0, 1)
 
         return jsonify({
             "success": True,
             "overview": {
                 "total_students": total_students,
-                "total_quizzes": total_quizzes,
+                "total_detective_challenges": total_detective,
                 "total_eco_actions": total_eco,
-                "average_score": avg_score
+                "average_detective_score": avg_score
             }
         })
 
 @app.route("/api/admin/students", methods=["GET"])
 def admin_get_students():
-    """Xem danh sách học sinh kèm điểm số và thống kê"""
     if not is_admin_or_teacher():
         return jsonify({"success": False, "message": "Quyền truy cập bị từ chối."}), 403
 
+    grade_param = request.args.get("grade", "all")
+    search_param = request.args.get("q", "").strip()
+
+    query = """
+        SELECT u.id, u.username, u.full_name, u.grade, u.classroom, u.created_at,
+               COALESCE(u.detective_score, 0) AS detective_score,
+               (SELECT COUNT(*) FROM eco_logs e WHERE e.user_id = u.id) AS eco_count,
+               (COALESCE(u.detective_score, 0) + (SELECT COUNT(*) FROM eco_logs e WHERE e.user_id = u.id) * 10) AS total_points
+        FROM users u
+        WHERE u.role != 'teacher'
+    """
+    params = []
+    if grade_param != "all":
+        query += " AND u.grade = ?"
+        params.append(grade_param)
+
+    if search_param:
+        query += " AND (u.full_name LIKE ? OR u.username LIKE ?)"
+        params.extend([f"%{search_param}%", f"%{search_param}%"])
+
+    query += " ORDER BY u.grade ASC, total_points DESC"
+
     with get_db() as conn:
-        query = """
-            SELECT u.id, u.username, u.full_name, u.grade, u.classroom, u.created_at,
-                   COALESCE(SUM(q.score), 0) AS total_score,
-                   COUNT(q.id) AS total_quizzes,
-                   (SELECT COUNT(*) FROM eco_logs e WHERE e.user_id = u.id) AS eco_count
-            FROM users u
-            LEFT JOIN quiz_history q ON u.id = q.user_id
-            WHERE u.role != 'teacher'
-            GROUP BY u.id
-            ORDER BY u.created_at DESC
-        """
-        rows = conn.execute(query).fetchall()
+        rows = conn.execute(query, tuple(params)).fetchall()
         students = [dict(r) for r in rows]
         return jsonify({"success": True, "students": students})
 
 @app.route("/api/admin/students/reset-password", methods=["POST"])
 def admin_reset_password():
-    """Giáo viên đặt lại mật khẩu cho học sinh về '123456'"""
     if not is_admin_or_teacher():
         return jsonify({"success": False, "message": "Quyền truy cập bị từ chối."}), 403
 
     data = request.get_json() or {}
-    student_id = data.get("student_id")
-    if not student_id:
-        return jsonify({"success": False, "message": "Thiếu student_id."}), 400
+    user_id = data.get("user_id")
+    new_password = data.get("new_password", "123456").strip()
 
-    new_pwd = "123456"
-    salt = secrets.token_hex(8)
-    pwd_hash = hash_password(new_pwd, salt)
+    if not user_id:
+        return jsonify({"success": False, "message": "Thiếu user_id."}), 400
+
+    new_salt = secrets.token_hex(8)
+    new_hash = hash_password(new_password, new_salt)
 
     with get_db() as conn:
-        cursor = conn.cursor()
-        cursor.execute("UPDATE users SET password_hash = ?, salt = ? WHERE id = ?", (pwd_hash, salt, student_id))
+        conn.execute("UPDATE users SET password_hash = ?, salt = ? WHERE id = ?", (new_hash, new_salt, user_id))
         conn.commit()
 
-        if cursor.rowcount == 0:
-            return jsonify({"success": False, "message": "Không tìm thấy học sinh."}), 404
-
-        return jsonify({
-            "success": True,
-            "message": f"Đã đặt lại mật khẩu của học sinh về mặc định: {new_pwd}"
-        })
+    return jsonify({"success": True, "message": f"Đã reset mật khẩu học sinh thành: {new_password}"})
 
 @app.route("/api/admin/students/<int:student_id>", methods=["DELETE"])
 def admin_delete_student(student_id):
-    """Xóa tài khoản học sinh"""
     if not is_admin_or_teacher():
         return jsonify({"success": False, "message": "Quyền truy cập bị từ chối."}), 403
 
     with get_db() as conn:
-        cursor = conn.cursor()
-        cursor.execute("DELETE FROM users WHERE id = ? AND role != 'teacher'", (student_id,))
-        cursor.execute("DELETE FROM sessions WHERE user_id = ?", (student_id,))
-        cursor.execute("DELETE FROM quiz_history WHERE user_id = ?", (student_id,))
-        cursor.execute("DELETE FROM eco_logs WHERE user_id = ?", (student_id,))
+        conn.execute("DELETE FROM users WHERE id = ? AND role != 'teacher'", (student_id,))
         conn.commit()
 
-        if cursor.rowcount == 0:
-            return jsonify({"success": False, "message": "Không thể xóa học sinh này."}), 404
-
-        return jsonify({"success": True, "message": "Đã xóa học sinh và toàn bộ dữ liệu liên quan thành công."})
-
-@app.route("/api/admin/quiz-stats", methods=["GET"])
-def admin_quiz_stats():
-    """Thống kê chi tiết tỷ lệ làm đúng và câu hỏi học sinh hay nhầm lẫn nhất"""
-    if not is_admin_or_teacher():
-        return jsonify({"success": False, "message": "Quyền truy cập bị từ chối."}), 403
-
-    # Phân tích 5 câu hỏi trọng tâm của chương trình GDPT 2018
-    question_analytics = [
-        {
-            "id": 1,
-            "topic": "Tế bào học (KHTN 6)",
-            "title": "Bào quan quang hợp (Lục lạp)",
-            "correct_rate": 88,
-            "difficulty": "Dễ",
-            "diagnosis": "Đa số học sinh nắm vững lục lạp là nơi quang hợp chỉ có ở thực vật."
-        },
-        {
-            "id": 2,
-            "topic": "Trao đổi chất (KHTN 7)",
-            "title": "Nguyên liệu quang hợp (CO2 và H2O)",
-            "correct_rate": 78,
-            "difficulty": "Trung bình",
-            "diagnosis": "Một số học sinh bị nhầm lẫn giữa sản phẩm tạo ra (O2) và chất nguyên liệu ban đầu."
-        },
-        {
-            "id": 3,
-            "topic": "Tuần hoàn máu (KHTN 8)",
-            "title": "Tại sao tim đập không mỏi (Chu kỳ tim)",
-            "correct_rate": 62,
-            "difficulty": "Khó",
-            "diagnosis": "Học sinh hay nhầm tim làm việc liên tục 24/24 mà không biết tim có pha giãn chung nghỉ 0.4s."
-        },
-        {
-            "id": 4,
-            "topic": "Di truyền học (KHTN 9)",
-            "title": "Quy luật phân li Menđen (F1: 100% Trội)",
-            "correct_rate": 55,
-            "difficulty": "Vận dụng",
-            "diagnosis": "Học sinh thường nhầm lẫn giữa tỷ lệ F1 (100% Aa) và tỷ lệ phân li F2 (3 Trội : 1 Lặn)."
-        },
-        {
-            "id": 5,
-            "topic": "Hệ sinh thái & Môi trường",
-            "title": "Bảo vệ sinh vật sản xuất sơ cấp",
-            "correct_rate": 92,
-            "difficulty": "Thực tế",
-            "diagnosis": "Học sinh hiểu rất tốt vai trò của cây xanh trong chuỗi thức ăn tự nhiên."
-        }
-    ]
-
-    with get_db() as conn:
-        recent_tests = conn.execute("""
-            SELECT q.id, q.topic, q.score, q.total_questions, q.rank_title, q.completed_at,
-                   u.full_name, u.grade, u.classroom
-            FROM quiz_history q
-            JOIN users u ON q.user_id = u.id
-            ORDER BY q.completed_at DESC LIMIT 15
-        """).fetchall()
-
-        return jsonify({
-            "success": True,
-            "questions": question_analytics,
-            "recent_tests": [dict(r) for r in recent_tests]
-        })
+    return jsonify({"success": True, "message": "Đã xóa tài khoản học sinh thành công."})
 
 @app.route("/api/admin/eco-logs/<int:log_id>", methods=["DELETE"])
 def admin_delete_eco_log(log_id):
-    """Giáo viên kiểm duyệt / xóa bài đăng rác hoặc không phù hợp"""
     if not is_admin_or_teacher():
         return jsonify({"success": False, "message": "Quyền truy cập bị từ chối."}), 403
 
     with get_db() as conn:
-        cursor = conn.cursor()
-        cursor.execute("DELETE FROM eco_logs WHERE id = ?", (log_id,))
+        conn.execute("DELETE FROM eco_logs WHERE id = ?", (log_id,))
         conn.commit()
-        return jsonify({"success": True, "message": "Đã xóa bài nhật ký xanh thành công."})
+
+    return jsonify({"success": True, "message": "Đã xóa nhật ký xanh vi phạm."})
 
 @app.route("/api/admin/export-csv", methods=["GET"])
 def admin_export_csv():
-    """Xuất bảng điểm học sinh toàn trường ra file CSV (chuẩn UTF-8 mở được trên Microsoft Excel)"""
-    # Cho phép tải khi có query token hoặc header
-    token = request.args.get("token")
-    user = None
-    if token:
-        user_id = verify_token(token)
-        if user_id:
-            with get_db() as conn:
-                user = conn.execute("SELECT * FROM users WHERE id = ?", (user_id,)).fetchone()
-    if not user or user["role"] not in ["teacher", "admin"]:
-        user = get_current_user()
-
-    if not user or user["role"] not in ["teacher", "admin"]:
-        return "Quyền truy cập bị từ chối. Chỉ dành cho Giáo viên.", 403
+    if not is_admin_or_teacher():
+        return jsonify({"success": False, "message": "Quyền truy cập bị từ chối."}), 403
 
     output = io.StringIO()
-    # Ghi UTF-8 BOM để Excel hiển thị đúng tiếng Việt có dấu
-    output.write('\ufeff')
+    output.write('\ufeff')  # UTF-8 BOM
     writer = csv.writer(output)
 
-    # Tiêu đề cột
-    writer.writerow(["Mã HS", "Tên đăng nhập", "Họ và tên", "Khối lớp", "Lớp/Phòng", "Tổng điểm Quiz", "Số bài thi", "Hành động xanh", "Ngày đăng ký"])
+    writer.writerow(["Mã HS", "Tên đăng nhập", "Họ và tên", "Khối lớp", "Lớp/Phòng", "Điểm Thám tử Lab", "Hành động xanh", "Tổng điểm tích lũy", "Ngày đăng ký"])
 
     with get_db() as conn:
         query = """
             SELECT u.id, u.username, u.full_name, u.grade, u.classroom, u.created_at,
-                   COALESCE(SUM(q.score), 0) AS total_score,
-                   COUNT(q.id) AS total_quizzes,
-                   (SELECT COUNT(*) FROM eco_logs e WHERE e.user_id = u.id) AS eco_count
+                   COALESCE(u.detective_score, 0) AS detective_score,
+                   (SELECT COUNT(*) FROM eco_logs e WHERE e.user_id = u.id) AS eco_count,
+                   (COALESCE(u.detective_score, 0) + (SELECT COUNT(*) FROM eco_logs e WHERE e.user_id = u.id) * 10) AS total_points
             FROM users u
-            LEFT JOIN quiz_history q ON u.id = q.user_id
             WHERE u.role != 'teacher'
-            GROUP BY u.id
-            ORDER BY u.grade ASC, total_score DESC
+            ORDER BY u.grade ASC, total_points DESC
         """
         rows = conn.execute(query).fetchall()
         for r in rows:
@@ -684,9 +601,9 @@ def admin_export_csv():
                 r["full_name"],
                 f"Khối {r['grade']}",
                 r["classroom"] or "Chưa xếp",
-                r["total_score"],
-                r["total_quizzes"],
+                r["detective_score"],
                 r["eco_count"],
+                r["total_points"],
                 r["created_at"]
             ])
 
@@ -696,15 +613,14 @@ def admin_export_csv():
     return response
 
 # ==================== SERVER START ====================
-# Tự động khởi tạo DB khi chạy trực tiếp hoặc chạy qua WSGI (Gunicorn / Render)
 init_db()
 
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 5000))
     print(f"\n==========================================================")
-    print(f"🚀 SmartBio 360 Backend Server đang chạy tại: http://localhost:{port}")
+    print(f"🚀 SmartBio 360 Backend Server (Lab 360° & Hành tinh Xanh)")
+    print(f"🌐 Đang chạy tại: http://localhost:{port}")
     print(f"📁 Cơ sở dữ liệu: {DB_PATH}")
     print(f"🔑 Tài khoản Quản trị viên / Giáo viên: admin / admin123")
-    print(f"🌐 Mở trình duyệt truy cập: http://localhost:{port}")
     print(f"==========================================================\n")
     app.run(host="0.0.0.0", port=port, debug=False)
